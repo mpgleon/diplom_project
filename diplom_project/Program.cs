@@ -74,6 +74,12 @@ namespace diplom_project
                 c.RoutePrefix = string.Empty; // Делает Swagger доступным по корневому URL (localhost:port)
             });
 
+            app.MapGet("/", async context =>
+            {
+                context.Response.Redirect("/registration.html"); //Пока не делает регистрацию основной из за сваггера выше
+                await Task.CompletedTask;
+            });
+
             app.UseHttpsRedirection();
             app.UseStaticFiles();
             app.UseAuthentication();

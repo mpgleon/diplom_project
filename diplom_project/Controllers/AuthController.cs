@@ -45,9 +45,42 @@ namespace diplom_project.Controllers
                 Expires = refreshTokenExpiry
             });
         }
+
+        [HttpPost("registration")]
+        public async Task<IActionResult> Register([FromBody] RegisterModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            try
+            {
+                var user = await _authService.RegisterUser(model);
+                var jwtToken = _authService.GenerateJwtToken(user);
+                var (refreshToken, refreshTokenExpiry) = await _authService.GenerateRefreshToken(user);
+
+                return Ok(new
+                {
+                    JwtToken = jwtToken,
+                    RefreshToken = refreshToken,
+                    Expires = refreshTokenExpiry
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 
     public class LoginModel
+    {
+        public string Email { get; set; }
+        public string? Phone { get; set; }
+        public string Password { get; set; }
+    }
+    public class RegisterModel
     {
         public string Email { get; set; }
         public string? Phone { get; set; }

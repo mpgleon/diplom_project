@@ -7,6 +7,8 @@
     using Microsoft.Extensions.Configuration;
     using System.Threading.Tasks;
     using diplom_project.Models;
+    using diplom_project.Controllers;
+    using Microsoft.EntityFrameworkCore;
 
     public class AuthService : IAuthService
     {
@@ -51,6 +53,35 @@
             await _context.SaveChangesAsync();
 
             return (token, expiry);
+        }
+        public async Task<User> RegisterUser(RegisterModel model)
+        {
+            // Проверка, существует ли пользователь с таким email
+            var existingUser = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == model.Email);
+
+            if (existingUser != null)
+            {
+                throw new Exception("User with this email already exists");
+            }
+
+            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(model.Password);
+
+            var user = new User
+            {
+                Email = model.Email,
+                Phone = model.Phone,
+                Password = hashedPassword,
+                Datestamp = DateTime.UtcNow,
+                Role = "User", // По умолчанию роль User
+                IsActive = true
+            };
+
+            // Сохранение пользователя
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            return user;
         }
     }
 }

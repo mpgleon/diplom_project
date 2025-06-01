@@ -9,6 +9,8 @@
     using diplom_project.Models;
     using diplom_project.Controllers;
     using Microsoft.EntityFrameworkCore;
+    
+
 
     public class AuthService : IAuthService
     {
@@ -23,12 +25,22 @@
 
         public string GenerateJwtToken(User user)
         {
+            var userRoles = _context.UserRoles
+                .Where(ur => ur.UserId == user.Id)
+                .ToList(); // Предварительно загружаем данные
+
+            var roles = userRoles
+                .Join(_context.Roles ?? Enumerable.Empty<Role>(),
+                ur => ur.RoleId,
+                r => r.Id,
+                (ur, r) => r.Name)
+                .ToList();
+
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.Role ?? "User")
-            };
+                new Claim(ClaimTypes.Email, user.Email)
+            }.Concat(roles.Select(r => new Claim(ClaimTypes.Role, r)));
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -37,7 +49,7 @@
                 issuer: _configuration["Jwt:Issuer"],
                 audience: _configuration["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.Now.AddMinutes(30),
+                expires: DateTime.UtcNow.AddMinutes(30),
                 signingCredentials: creds);
 
             return new JwtSecurityTokenHandler().WriteToken(token);
@@ -56,7 +68,6 @@
         }
         public async Task<User> RegisterUser(RegisterModel model)
         {
-            // Проверка, существует ли пользователь с таким email
             var existingUser = await _context.Users
                 .FirstOrDefaultAsync(u => u.Email == model.Email);
 
@@ -73,12 +84,32 @@
                 Phone = model.Phone,
                 Password = hashedPassword,
                 Datestamp = DateTime.UtcNow,
-                Role = "User", // По умолчанию роль User
                 IsActive = true
             };
 
-            // Сохранение пользователя
             _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            var userProfile = new UserProfile
+            {
+                UserId = user.Id,
+                Email = user.Email, // Добавляем Email из User
+                Phone = user.Phone,
+                FirstName = model.FirstName ?? "Unknown", // Можно задать значения по умолчанию
+                LastName = model.LastName ?? "Unknown",
+                DateOfBirth = DateTime.Today,
+                IsVerified = false,
+                Rating = 0.0M,
+                Description = null,
+                PhotoUrl = null
+            };
+
+            _context.UserProfiles.Add(userProfile);
+            await _context.SaveChangesAsync();
+
+            // Назначение роли "Tenant" по умолчанию
+            var tenantRole = await _context.Roles.FirstAsync(r => r.Name == "Tenant");
+            _context.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = tenantRole.Id });
             await _context.SaveChangesAsync();
 
             return user;

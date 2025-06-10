@@ -15,5 +15,6 @@
         public string? Description { get; set; }
         public string? PhotoUrl { get; set; }
         public ICollection<UserProfileLanguage> UserProfileLanguages { get; set; }
+        
     }
 }

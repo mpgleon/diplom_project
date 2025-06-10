@@ -12,5 +12,6 @@
         public bool IsActive { get; set; } = true;
         public ICollection<UserRole> UserRoles { get; set; }
         public UserProfile? UserProfile { get; set; }
+        public decimal Balance { get; set; }
     }
 }

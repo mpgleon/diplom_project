@@ -93,9 +93,9 @@
             var userProfile = new UserProfile
             {
                 UserId = user.Id,
-                Email = user.Email, // Добавляем Email из User
+                Email = user.Email,
                 Phone = user.Phone,
-                FirstName = model.FirstName ?? "Unknown", // Можно задать значения по умолчанию
+                FirstName = model.FirstName ?? "Unknown",
                 LastName = model.LastName ?? "Unknown",
                 DateOfBirth = DateTime.Today,
                 IsVerified = false,

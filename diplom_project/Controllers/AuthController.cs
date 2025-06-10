@@ -84,6 +84,8 @@ namespace diplom_project.Controllers
                 .Include(u => u.UserProfile)
                 .ThenInclude(up => up.UserProfileLanguages)
                 .ThenInclude(upl => upl.Language)
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
                 .FirstOrDefaultAsync(u => u.Email == email);
 
             if (user == null) return NotFound("User not found");
@@ -98,10 +100,12 @@ namespace diplom_project.Controllers
                 user.UserProfile.Phone,
                 user.UserProfile.DateOfBirth,
                 Languages = user.UserProfile.UserProfileLanguages.Select(upl => new { upl.Language.Code, upl.Language.Name }),
+                roles = user.UserRoles?.Select(ur => ur.Role.Name),
                 user.UserProfile.IsVerified,
                 user.UserProfile.Rating,
                 user.UserProfile.Description,
-                user.UserProfile.PhotoUrl
+                user.UserProfile.PhotoUrl,
+                user.Balance
             };
 
             return Ok(profile);
@@ -156,6 +160,36 @@ namespace diplom_project.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { message = "Profile updated successfully" });
         }
+
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest model)
+        {
+            if (string.IsNullOrEmpty(model.RefreshToken))
+                return BadRequest("Refresh token is required.");
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.RefreshToken == model.RefreshToken);
+
+            if (user == null || user.RefreshTokenExpiryTime == null || user.RefreshTokenExpiryTime < DateTime.UtcNow)
+                return Unauthorized("Invalid or expired refresh token.");
+
+            // Генерируем новый JWT
+            var newJwtToken = _authService.GenerateJwtToken(user);
+
+            // Генерируем новый RefreshToken (опционально)
+            var (newRefreshToken, expiry) = await _authService.GenerateRefreshToken(user);
+
+            // Возвращаем новый токен и (опционально) новый RefreshToken
+            return Ok(new
+            {
+                jwtToken = newJwtToken,
+                refreshToken = newRefreshToken,
+                expiry = expiry
+            });
+        }
+
+
+
     }
     public class LoginModel
     {

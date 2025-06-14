@@ -68,12 +68,20 @@
         }
         public async Task<User> RegisterUser(RegisterModel model)
         {
-            var existingUser = await _context.Users
+            var existingEmail = await _context.Users
                 .FirstOrDefaultAsync(u => u.Email == model.Email);
 
-            if (existingUser != null)
+            if (existingEmail != null)
             {
                 throw new Exception("User with this email already exists");
+            }
+
+            var existingPhone = await _context.Users
+                .FirstOrDefaultAsync(u => u.Phone == model.Phone);
+
+            if (existingPhone != null)
+            {
+                throw new Exception("User with this phone number already exists");
             }
 
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(model.Password);
@@ -95,13 +103,17 @@
                 UserId = user.Id,
                 Email = user.Email,
                 Phone = user.Phone,
-                FirstName = model.FirstName ?? "Unknown",
-                LastName = model.LastName ?? "Unknown",
-                DateOfBirth = DateTime.Today,
+                FirstName = null,
+                LastName = null,
+                Surname = null,
+                DateOfBirth = null,
                 IsVerified = false,
                 Rating = 0.0M,
                 Description = null,
-                PhotoUrl = null
+                PhotoUrl = null,
+                Instagram = null,
+                Facebook = null,
+                Telegram = null 
             };
 
             _context.UserProfiles.Add(userProfile);

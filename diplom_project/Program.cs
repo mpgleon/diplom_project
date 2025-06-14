@@ -14,6 +14,17 @@ namespace diplom_project
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", policy =>
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
+            });
+
+
             builder.Services.AddControllersWithViews();
 
             // Настройка сервиса
@@ -81,6 +92,7 @@ namespace diplom_project
 
 
             var app = builder.Build();
+            app.UseCors("AllowAll");
 
             if (!app.Environment.IsDevelopment())
             {
@@ -97,11 +109,12 @@ namespace diplom_project
 
             app.MapGet("/", async context =>
             {
-                context.Response.Redirect("/registration.html"); //Пока не делает регистрацию основной из за сваггера выше
+                context.Response.Redirect("/registration.html"); //------------------
                 await Task.CompletedTask;
             });
 
-            app.UseHttpsRedirection();
+            app.UseRouting();
+            app.UseHttpsRedirection(); //12312312312321
             app.UseStaticFiles();
             app.UseAuthentication();
             app.UseAuthorization();

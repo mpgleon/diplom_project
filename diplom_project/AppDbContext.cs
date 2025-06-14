@@ -12,8 +12,40 @@ namespace diplom_project
         public DbSet<Language> Languages { get; set; }
         public DbSet<UserProfileLanguage> UserProfileLanguages { get; set; }
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        public DbSet<Listing> Listings { get; set; }
+        public DbSet<HouseType> HouseTypes { get; set; }
+        public DbSet<Amenity> Amenities { get; set; }
+        public DbSet<ListingAmenity> ListingAmenities { get; set; }
+        public DbSet<MainFeature> MainFeatures { get; set; } // Добавляем
+        public DbSet<ListingMainFeature> ListingMainFeatures { get; set; } // Добавляем
+        public DbSet<Photo> Photos { get; set; } // Добавляем
+        public DbSet<ListingPhoto> ListingPhotos { get; set; } // Добавляем
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<ListingAmenity>()
+                .HasKey(la => new { la.ListingId, la.AmenityId });
+
+            modelBuilder.Entity<ListingMainFeature>()
+                .HasKey(lmf => new { lmf.ListingId, lmf.MainFeatureId });
+
+            modelBuilder.Entity<ListingPhoto>()
+                .HasKey(lp => new { lp.ListingId, lp.PhotoId });
+
+            modelBuilder.Entity<Listing>()
+                .HasMany(l => l.ListingAmenities)
+                .WithOne(la => la.Listing)
+                .HasForeignKey(la => la.ListingId);
+
+            modelBuilder.Entity<Listing>()
+                .HasMany(l => l.ListingMainFeatures)
+                .WithOne(lmf => lmf.Listing)
+                .HasForeignKey(lmf => lmf.ListingId);
+
+            modelBuilder.Entity<Listing>()
+                .HasMany(l => l.ListingPhotos)
+                .WithOne(lp => lp.Listing)
+                .HasForeignKey(lp => lp.ListingId);
+
             // Настройка UserRoles
             modelBuilder.Entity<UserRole>()
                 .HasKey(ur => new { ur.UserId, ur.RoleId });

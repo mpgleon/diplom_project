@@ -117,9 +117,7 @@
                 localStorage.setItem('refreshToken', data.refreshToken);
                 localStorage.setItem('tokenExpires', data.expires);
 
-                // Перенаправляем на защищенную страницу или показываем успех
-                alert('Login successful! JWT: ' + data.jwtToken);
-                // window.location.href = '/dashboard'; // Пример перенаправления
+
             } catch (error) {
                 errorMessage.textContent = 'An error occurred';
                 errorMessage.style.display = 'block';

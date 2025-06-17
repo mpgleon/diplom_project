@@ -3,6 +3,7 @@ using diplom_project.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 
@@ -13,12 +14,10 @@ namespace diplom_project.Controllers
     public class ProfileController : ControllerBase
     {
         private readonly AppDbContext _context;
-        private readonly IAuthService _authService;
 
-        public ProfileController(AppDbContext context, IAuthService authService)
+        public ProfileController(AppDbContext context)
         {
             _context = context;
-            _authService = authService;
         }
 
         [HttpGet]
@@ -62,6 +61,45 @@ namespace diplom_project.Controllers
             };
 
             return Ok(profileResponse);
+        }
+        [HttpPost("ratings/user")]
+        [Authorize]
+        public async Task<IActionResult> CreateUserRating([FromBody] UserRatingModel model)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            var ratedUser = await _context.Users.FindAsync(model.UserId2);
+            if (ratedUser == null)
+                return BadRequest("Rated user not found");
+
+            var existingRating = await _context.RatingListUsers
+                .FirstOrDefaultAsync(rlu => rlu.UserId1 == user.Id && rlu.UserId2 == model.UserId2);
+            if (existingRating != null)
+                return BadRequest("You have already left a review for this user.");
+
+            var rating = new RatingListUser
+            {
+                UserId1 = user.Id,
+                UserId2 = model.UserId2,
+                Description = model.Description,
+                Rating = model.Rating,
+                CreatedDate = DateTime.UtcNow
+            };
+
+            _context.RatingListUsers.Add(rating);
+            await _context.SaveChangesAsync();
+
+            // Обновляем рейтинг пользователя
+            var ratingService = _context.GetService<IRatingService>();
+            await ratingService.UpdateUserRatingAsync(model.UserId2);
+
+            return Ok(new { message = "Rating added successfully" });
         }
 
         [HttpPost]
@@ -135,8 +173,14 @@ namespace diplom_project.Controllers
         public List<string>? LanguageCodes { get; set; }
         public string? Description { get; set; }
         public string? PhotoUrl { get; set; }
-        public string Instagram { get; set; }
-        public string Facebook { get; set; }
-        public string Telegram { get; set; }
+        public string? Instagram { get; set; }
+        public string? Facebook { get; set; }
+        public string? Telegram { get; set; }
+    }
+    public class UserRatingModel
+    {
+        public int UserId2 { get; set; } // Кому оставлен отзыв
+        public string Description { get; set; }
+        public decimal Rating { get; set; }
     }
 }

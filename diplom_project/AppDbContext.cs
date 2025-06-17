@@ -1,8 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using diplom_project.Models;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace diplom_project
 {
+
     public class AppDbContext : DbContext
     {
         public DbSet<User> Users { get; set; }
@@ -16,12 +19,60 @@ namespace diplom_project
         public DbSet<HouseType> HouseTypes { get; set; }
         public DbSet<Amenity> Amenities { get; set; }
         public DbSet<ListingAmenity> ListingAmenities { get; set; }
-        public DbSet<MainFeature> MainFeatures { get; set; } // Добавляем
-        public DbSet<ListingMainFeature> ListingMainFeatures { get; set; } // Добавляем
-        public DbSet<Photo> Photos { get; set; } // Добавляем
-        public DbSet<ListingPhoto> ListingPhotos { get; set; } // Добавляем
+        public DbSet<MainFeature> MainFeatures { get; set; }
+        public DbSet<ListingMainFeature> ListingMainFeatures { get; set; }
+        public DbSet<Photo> Photos { get; set; } 
+        public DbSet<ListingPhoto> ListingPhotos { get; set; } 
+        public DbSet<RatingListUser> RatingListUsers { get; set; }
+        public DbSet<RatingListListing> RatingListListings { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+
+            // Конфигурация для RatingListListing
+            modelBuilder.Entity<RatingListListing>()
+                .HasKey(rll => rll.Id);
+
+            modelBuilder.Entity<RatingListListing>()
+                .HasOne(rll => rll.Reviewer)
+                .WithMany()
+                .HasForeignKey(rll => rll.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<RatingListListing>()
+                .HasOne(rll => rll.Listing)
+                .WithMany(l => l.RatingListListings)
+                .HasForeignKey(rll => rll.ListingId) // Явно указываем ListingId
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<RatingListListing>()
+                .Property(rll => rll.ListingId)
+                .HasColumnName("ListingId"); // Убеждаемся, что имя столбца совпадает
+
+            modelBuilder.Entity<RatingListListing>()
+                .HasIndex(rll => new { rll.UserId, rll.ListingId }) // Уникальный индекс
+                .IsUnique(); // Запрет дублирования отзывов
+
+            // Конфигурация для RatingListUser
+            modelBuilder.Entity<RatingListUser>()
+                .HasKey(rlu => rlu.Id); // Id как первичный ключ
+
+            modelBuilder.Entity<RatingListUser>()
+                .HasOne(rlu => rlu.Reviewer)
+                .WithMany() // Нет обратной навигации
+                .HasForeignKey(rlu => rlu.UserId1);
+
+
+            modelBuilder.Entity<RatingListUser>()
+                .HasOne(rlu => rlu.ReviewedUser)
+                .WithMany() // Нет обратной навигации
+                .HasForeignKey(rlu => rlu.UserId2);
+
+
+            modelBuilder.Entity<RatingListUser>()
+                .HasIndex(rlu => new { rlu.UserId1, rlu.UserId2 }) // Уникальный индекс для пары
+                .IsUnique(); // Запрет дублирования отзывов
+
             modelBuilder.Entity<ListingAmenity>()
                 .HasKey(la => new { la.ListingId, la.AmenityId });
 
@@ -88,6 +139,33 @@ namespace diplom_project
                 new Language { Id = 4, Code = "DE", Name = "Deutsch" },
                 new Language { Id = 5, Code = "UA", Name = "Ukrainian"}
             );
+            modelBuilder.Entity<Listing>()
+                .Property(l => l.AverageRating)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<Listing>()
+                .Property(l => l.PerDay)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<Listing>()
+                .Property(l => l.PerMonth)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<Listing>()
+                .Property(l => l.PerWeek)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<RatingListListing>()
+                .Property(rll => rll.Rating)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<UserProfile>()
+                .Property(up => up.Rating)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<User>()
+                .Property(u => u.Balance)
+                .HasColumnType("decimal(18,2)");
         }
     }
 }

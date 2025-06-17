@@ -123,6 +123,7 @@ namespace diplom_project.Controllers
         public string Phone { get; set; }
         [Required]
         public string Password { get; set; }
+        public bool IsLandlord { get; set; }
 
     }
     

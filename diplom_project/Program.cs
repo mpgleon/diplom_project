@@ -29,7 +29,7 @@ namespace diplom_project
 
             // Настройка сервиса
             builder.Services.AddScoped<IAuthService, AuthService>();
-
+            builder.Services.AddScoped<IRatingService, RatingService>();
             // Настройка JWT
             builder.Services.AddAuthentication("Bearer")
                 .AddJwtBearer("Bearer", options =>
@@ -123,4 +123,5 @@ namespace diplom_project
             app.Run();
         }
     }
+
 }

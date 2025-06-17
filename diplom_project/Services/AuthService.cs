@@ -92,7 +92,8 @@
                 Phone = model.Phone,
                 Password = hashedPassword,
                 Datestamp = DateTime.UtcNow,
-                IsActive = true
+                IsActive = true,
+                Balance = 0.00m
             };
 
             _context.Users.Add(user);
@@ -106,7 +107,7 @@
                 FirstName = null,
                 LastName = null,
                 Surname = null,
-                DateOfBirth = null,
+                DateOfBirth = DateTime.Today,
                 IsVerified = false,
                 Rating = 0.0M,
                 Description = null,
@@ -119,9 +120,15 @@
             _context.UserProfiles.Add(userProfile);
             await _context.SaveChangesAsync();
 
-            // Назначение роли "Tenant" по умолчанию
+            // Назначение ролей
             var tenantRole = await _context.Roles.FirstAsync(r => r.Name == "Tenant");
             _context.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = tenantRole.Id });
+
+            if (model.IsLandlord)
+            {
+                var landlordRole = await _context.Roles.FirstAsync(r => r.Name == "Landlord");
+                _context.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = landlordRole.Id });
+            }
             await _context.SaveChangesAsync();
 
             return user;

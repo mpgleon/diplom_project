@@ -28,6 +28,13 @@ namespace diplom_project
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<Listing>()
+                .Property(l => l.CheckInTime)
+                .HasColumnType("time");
+
+            modelBuilder.Entity<Listing>()
+                .Property(l => l.CheckOutTime)
+                .HasColumnType("time");
 
             // Конфигурация для RatingListListing
             modelBuilder.Entity<RatingListListing>()

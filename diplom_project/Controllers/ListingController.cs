@@ -97,20 +97,23 @@ namespace diplom_project.Controllers
                 .Where(l => l.Id == id)
                 .Select(l => new
                 {
+                    
                     HouseType = l.HouseType.Name,
                     Photos = l.ListingPhotos.Select(lp => lp.Photo.Url).ToList(),
-                    Title = l.Title,
-                    Location = l.Location,
+                    l.Title,
+                    l.Location,
                     Price = l.PerWeek ?? l.PerDay ?? l.PerMonth,
                     Amenities = l.ListingAmenities.Select(la => la.Amenity.Name).ToList(),
-                    MainFeatures = l.ListingMainFeatures.Select(lmf => new { Name = lmf.MainFeature.Name, Value = lmf.Value }).ToList(),
-                    AverageRating = l.AverageRating,
+                    MainFeatures = l.ListingMainFeatures.Select(lmf => new { lmf.MainFeature.Name, lmf.Value }).ToList(),
+                    l.AverageRating,
+                    CheckInTime = l.CheckInTime.ToString(@"hh\:mm"), 
+                    CheckOutTime = l.CheckOutTime.ToString(@"hh\:mm"),
                     Landlord = new
                     {
-                        FirstName = l.User.UserProfile.FirstName,
-                        LastName = l.User.UserProfile.LastName,
-                        PhotoUrl = l.User.UserProfile.PhotoUrl,
-                        Rating = l.User.UserProfile.Rating
+                        l.User.UserProfile.FirstName,
+                        l.User.UserProfile.LastName,
+                        l.User.UserProfile.PhotoUrl,
+                        l.User.UserProfile.Rating
                     },
                     MaxTenants = l.maxTenants,
                     Reviews = l.RatingListListings.Select(rll => new
@@ -119,12 +122,13 @@ namespace diplom_project.Controllers
                         ReviewerLastName = rll.Reviewer.UserProfile.LastName,
                         ReviewerPhotoUrl = rll.Reviewer.UserProfile.PhotoUrl,
                         ReviewerRating = rll.Reviewer.UserProfile.Rating,
-                        Description = rll.Description
+                        rll.Description
                     }).ToList(),
-                    Description = l.Description,
-                    PerWeek = l.PerWeek,
-                    PerDay = l.PerDay,
-                    PerMonth = l.PerMonth // Добавляем поля для вычисления RentalTypes
+                    l.Country,
+                    l.Description,
+                    l.PerWeek,
+                    l.PerDay,
+                    l.PerMonth // Добавляем поля для вычисления RentalTypes
                 })
                 .AsNoTracking()
                 .FirstOrDefaultAsync();
@@ -144,8 +148,11 @@ namespace diplom_project.Controllers
                 listing.HouseType,
                 listing.Photos,
                 listing.Title,
+                listing.CheckInTime,
+                listing.CheckOutTime,
+                listing.Country,
                 listing.Location,
-                RentalTypes = rentalTypes,
+                rentalTypes,
                 listing.Price,
                 listing.Amenities,
                 listing.MainFeatures,
@@ -180,10 +187,13 @@ namespace diplom_project.Controllers
                 UserId = user.Id,
                 HouseTypeId = model.HouseTypeId,
                 Title = model.Title,
+                CheckInTime = model.CheckInTime,
+                CheckOutTime = model.CheckOurTime,
                 Description = model.Description,
                 PerWeek = model.PerWeek,
                 PerDay = model.PerDay,
                 PerMonth = model.PerMonth,
+                Country = model.Country,
                 Location = model.Location,
                 Model3DUrl = model.Model3DUrl,
                 IsModerated = false,
@@ -236,7 +246,7 @@ namespace diplom_project.Controllers
             _context.Listings.Add(listing);
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Listing created successfully", id = listing.Id });
+            return Ok(new { message = "Listing created successfully", listing.Id });
         }
         public class RentalType
         {
@@ -247,6 +257,8 @@ namespace diplom_project.Controllers
         {
             public int HouseTypeId { get; set; }
             public string Title { get; set; }
+            public TimeSpan CheckInTime {  get; set; }
+            public TimeSpan CheckOurTime { get; set; }
             public string Description { get; set; }
             public decimal? PerWeek { get; set; }
             public decimal? PerDay { get; set; }
@@ -259,6 +271,7 @@ namespace diplom_project.Controllers
             public List<string> PhotoUrls { get; set; } // Список путей к фотографиям
             public int maxTenants {get; set; }
             public decimal? Rating {  get; set; }
+            public string Country { get; set; }
         }
         public class RatingModel
         {

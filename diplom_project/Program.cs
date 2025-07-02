@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using diplom_project.Services;
 using Microsoft.OpenApi.Models;
+using diplom_project.Controllers;
 
 
 namespace diplom_project
@@ -13,7 +14,7 @@ namespace diplom_project
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-
+            
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowAll", policy =>
@@ -24,7 +25,7 @@ namespace diplom_project
                 });
             });
 
-
+            
             builder.Services.AddControllersWithViews();
 
             // Настройка сервиса
@@ -77,7 +78,7 @@ namespace diplom_project
                 });
             });
 
-
+            
 
             // Настройка Entity Framework
             builder.Services.AddDbContext<AppDbContext>(options => 

@@ -1,4 +1,6 @@
-﻿namespace diplom_project.Models;
+﻿using Microsoft.AspNetCore.Mvc;
+
+namespace diplom_project.Models;
 public class Listing
 {
     public int Id { get; set; }
@@ -9,6 +11,13 @@ public class Listing
     public decimal? PerWeek{ get; set; } 
     public decimal? PerDay { get; set; } 
     public decimal? PerMonth { get; set; }
+
+    [BindProperty]
+    public TimeSpan CheckInTime { get; set; } // Время въезда
+    [BindProperty]
+    public TimeSpan CheckOutTime { get; set; } // Время выезда
+
+    public string Country { get; set; }
     public string Location { get; set; }
     public DateTime CreatedDate { get; set; }
     public User User { get; set; }

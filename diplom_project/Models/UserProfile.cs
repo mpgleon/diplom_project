@@ -25,6 +25,7 @@ namespace diplom_project.Models
         public string? Telegram { get; set; } 
         public User User { get; set; }
         public ICollection<UserProfileLanguage> UserProfileLanguages { get; set; }
+        public string? Gender { get; set; }
         
     }
 }

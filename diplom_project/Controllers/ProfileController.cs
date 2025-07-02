@@ -56,8 +56,9 @@ namespace diplom_project.Controllers
                 user.UserProfile.Instagram,
                 user.UserProfile.Facebook,
                 user.UserProfile.Telegram,
-                roles = user.UserRoles?.Select(ur => ur.Role.Name),
-                user.Balance
+                user.UserProfile.Gender,
+                roles = user.UserRoles?.Select(ur => ur.Role.Name)
+                
             };
 
             return Ok(profileResponse);
@@ -130,6 +131,7 @@ namespace diplom_project.Controllers
             user.UserProfile.Instagram = model.Instagram;
             user.UserProfile.Facebook = model.Facebook;
             user.UserProfile.Telegram = model.Telegram;
+            user.UserProfile.Gender = model.Gender;
 
             // Удаление существующих языков с защитой от null
             if (user.UserProfile.UserProfileLanguages != null && user.UserProfile.UserProfileLanguages.Any())
@@ -176,6 +178,7 @@ namespace diplom_project.Controllers
         public string? Instagram { get; set; }
         public string? Facebook { get; set; }
         public string? Telegram { get; set; }
+        public string? Gender { get; set; }
     }
     public class UserRatingModel
     {

@@ -77,6 +77,77 @@ namespace diplom_project.Controllers
             return Ok(new { message = "Rating added successfully" });
         }
 
+        [HttpGet("selected/{id}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetSelectedListing(int id)
+        {
+            var listing = await _context.Listings
+                .Include(l => l.ListingPhotos)
+                    .ThenInclude(lp => lp.Photo)
+                .Include(l => l.User)
+                    .ThenInclude(u => u.UserProfile)
+                .Where(l => l.Id == id)
+                .Select(l => new
+                {
+                    Photos = l.ListingPhotos.Select(lp => lp.Photo.Url).ToList(),
+                    l.Title,
+                    l.Country,
+                    l.Location,
+                    l.AverageRating,
+                    Landlord = new
+                    {
+                        FullName = $"{l.User.UserProfile.FirstName} {l.User.UserProfile.LastName}",
+                        l.User.UserProfile.PhotoUrl
+                    }
+                })
+                .AsNoTracking()
+                .FirstOrDefaultAsync();
+
+            if (listing == null)
+                return NotFound("Listing not found");
+
+            return Ok(listing);
+        }
+
+        [HttpGet("details/{id}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetListingDetails(int id)
+        {
+            var listing = await _context.Listings
+                .Where(l => l.Id == id)
+                .Select(l => new
+                {
+                    CheckInTime = l.CheckInTime.ToString(@"hh\:mm"),
+                    CheckOutTime = l.CheckOutTime.ToString(@"hh\:mm"),
+                    MaxTenants = l.maxTenants,
+                    Price = l.PerWeek ?? l.PerDay ?? l.PerMonth,
+                    l.PerWeek,
+                    l.PerDay,
+                    l.PerMonth,
+                    
+                    
+                })
+                .AsNoTracking()
+                .FirstOrDefaultAsync();
+            var rentalTypes = new List<string>
+            {
+                listing.PerWeek.HasValue ? "Аренда на неделю" : null,
+                listing.PerDay.HasValue ? "Посуточная аренда" : null,
+                listing.PerMonth.HasValue ? "Аренда на месяц" : null
+            }.Where(rt => rt != null).ToList();
+            if (listing == null)
+                return NotFound("Listing not found");
+            var result = new
+            {
+                listing.CheckInTime,
+                listing.CheckOutTime, 
+                listing.MaxTenants,
+                rentalTypes,
+                listing.Price
+            };
+            return Ok(result);
+        }
+
         [HttpGet("{id}")]
         [AllowAnonymous]
         public async Task<IActionResult> GetListing(int id)
@@ -128,7 +199,7 @@ namespace diplom_project.Controllers
                     l.Description,
                     l.PerWeek,
                     l.PerDay,
-                    l.PerMonth // Добавляем поля для вычисления RentalTypes
+                    l.PerMonth
                 })
                 .AsNoTracking()
                 .FirstOrDefaultAsync();

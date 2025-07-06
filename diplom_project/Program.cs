@@ -94,7 +94,18 @@ namespace diplom_project
 
             var app = builder.Build();
             app.UseCors("AllowAll");
-
+            app.Use(async (context, next) =>
+            {
+                if (context.Request.Method == "OPTIONS")
+                {
+                    context.Response.StatusCode = StatusCodes.Status204NoContent;
+                    context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
+                    context.Response.Headers.Append("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+                    context.Response.Headers.Append("Access-Control-Allow-Headers", "Content-Type, Authorization");
+                    return;
+                }
+                await next();
+            });
             if (!app.Environment.IsDevelopment())
             {
                 app.UseExceptionHandler("/Home/Error");

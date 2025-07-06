@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 using System.Security.Claims;
 
 namespace diplom_project.Controllers
@@ -20,7 +21,7 @@ namespace diplom_project.Controllers
             _context = context;
         }
 
-        [HttpGet]
+        [HttpGet("get")]
         [Authorize]
         public async Task<IActionResult> GetProfile()
         {
@@ -60,6 +61,8 @@ namespace diplom_project.Controllers
                 roles = user.UserRoles?.Select(ur => ur.Role.Name)
                 
             };
+            if (profileResponse == null)
+                return NotFound(new { error = "Profile not found" });
 
             return Ok(profileResponse);
         }
@@ -103,7 +106,7 @@ namespace diplom_project.Controllers
             return Ok(new { message = "Rating added successfully" });
         }
 
-        [HttpPost]
+        [HttpPost("update")]
         [Authorize]
         public async Task<IActionResult> UpdateProfile([FromBody] ProfileModel model)
         {

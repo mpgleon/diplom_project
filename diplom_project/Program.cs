@@ -5,7 +5,8 @@ using System.Text;
 using diplom_project.Services;
 using Microsoft.OpenApi.Models;
 using diplom_project.Controllers;
-
+using Microsoft.Extensions.FileProviders;
+using Swashbuckle.AspNetCore.Filters;
 
 namespace diplom_project
 {
@@ -89,8 +90,8 @@ namespace diplom_project
                         errorNumbersToAdd: null // ƒополнительные коды ошибок (можно оставить null)
                     )
                 ));
-           
 
+            builder.Services.AddSignalR();
 
             var app = builder.Build();
             app.UseCors("AllowAll");
@@ -111,11 +112,12 @@ namespace diplom_project
                 app.UseExceptionHandler("/Home/Error");
                 app.UseHsts();
             }
-
+            
+            app.MapHub<ChatHub>("/chatHub");
             app.UseSwagger();
             app.UseSwaggerUI(c =>
             {
-                c.SwaggerEndpoint("/swagger/v1/swagger.json", "My API V1");
+                c.SwaggerEndpoint("/swagger/v1/swagger.json", "My API V2");
                 c.RoutePrefix = string.Empty; // ƒелает Swagger доступным по корневому URL (localhost:port)
             });
 
@@ -124,10 +126,14 @@ namespace diplom_project
                 context.Response.Redirect("/registration.html"); //------------------
                 await Task.CompletedTask;
             });
-
+            app.UseStaticFiles();
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.WebRootPath, "uploads", "avatars")),
+                RequestPath = "/uploads/avatars"
+            });
             app.UseRouting();
             app.UseHttpsRedirection(); //12312312312321
-            app.UseStaticFiles();
             app.UseAuthentication();
             app.UseAuthorization();
             app.MapControllers();

@@ -25,9 +25,30 @@ namespace diplom_project
         public DbSet<ListingPhoto> ListingPhotos { get; set; } 
         public DbSet<RatingListUser> RatingListUsers { get; set; }
         public DbSet<RatingListListing> RatingListListings { get; set; }
+        public DbSet<ChatMessage> ChatMessages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<ChatMessage>()
+                .HasKey(cm => cm.Id);
+
+            modelBuilder.Entity<ChatMessage>()
+                .HasOne(cm => cm.Sender)
+                .WithMany()
+                .HasForeignKey(cm => cm.SenderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ChatMessage>()
+                .HasOne(cm => cm.Recipient)
+                .WithMany()
+                .HasForeignKey(cm => cm.RecipientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Уникальный индекс для пары SenderId-RecipientId
+            modelBuilder.Entity<ChatMessage>()
+                .HasIndex(cm => new { cm.SenderId, cm.RecipientId })
+                .IsUnique(false);
+
             modelBuilder.Entity<Listing>()
                 .Property(l => l.CheckInTime)
                 .HasColumnType("time");

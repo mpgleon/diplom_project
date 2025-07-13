@@ -1,0 +1,116 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avatar Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+        }
+
+        .upload-section, .images-section {
+            margin-bottom: 20px;
+        }
+
+        input, button {
+            margin: 5px 0;
+        }
+
+        img {
+            max-width: 100px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Upload Avatar</h2>
+        <div class="upload-section">
+            <input type="text" id="jwtToken" placeholder="Enter JWT Token from Postman" style="width: 100%;">
+            <input type="file" id="avatarInput" accept="image/*">
+            <button onclick="uploadAvatar()">Upload</button>
+            <p id="uploadStatus"></p>
+        </div>
+
+        <h2>Existing Avatars</h2>
+        <div class="images-section" id="imagesContainer">
+            <!-- Images will be loaded here -->
+        </div>
+    </div>
+
+    <script>async function uploadAvatar() {
+            const fileInput = document.getElementById('avatarInput');
+            const jwtToken = document.getElementById('jwtToken').value;
+            const file = fileInput.files[0];
+            const status = document.getElementById('uploadStatus');
+
+            if (!file) {
+                status.textContent = 'Please select a file.';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('http://localhost:5197/api/profile/upload-avatar', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${jwtToken}`
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    status.textContent = 'Upload successful! Photo URL: ' + data.photoUrl;
+                    loadImages(`http://localhost:5197/api/profile/get-avatar${data.photoUrl}`); // Передаем полный URL
+                } else {
+                    status.textContent = 'Upload failed: ' + response.statusText;
+                }
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function loadImages(newImageUrl = null) {
+            const container = document.getElementById('imagesContainer');
+            container.innerHTML = 'Loading...';
+
+            try {
+                const jwtToken = document.getElementById('jwtToken').value;
+                const response = await fetch('http://localhost:5197/api/profile/get-all-avatars', {
+                    headers: {
+                        'Authorization': `Bearer ${jwtToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    let images = data.map(item => `http://localhost:5197/api/profile/get-avatar${item.photoUrl}`);
+                    if (newImageUrl) {
+                        images = [newImageUrl, ...images]; // Добавляем новое изображение
+                    }
+                    container.innerHTML = '';
+                    images.forEach(src => {
+                        const img = document.createElement('img');
+                        img.src = src;
+                        container.appendChild(img);
+                    });
+                } else {
+                    container.innerHTML = 'Error loading avatars: ' + response.statusText;
+                }
+            } catch (error) {
+                container.innerHTML = 'Error: ' + error.message;
+            }
+        }
+        // Загружаем изображения при открытии страницы
+        window.onload = loadImages;</script>
+</body>
+</html>

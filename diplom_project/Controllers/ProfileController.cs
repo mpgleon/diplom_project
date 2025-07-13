@@ -15,10 +15,12 @@ namespace diplom_project.Controllers
     public class ProfileController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IWebHostEnvironment _env;
 
-        public ProfileController(AppDbContext context)
+        public ProfileController(AppDbContext context, IWebHostEnvironment env)
         {
             _context = context;
+            _env = env;
         }
 
         [HttpGet("get")]
@@ -66,6 +68,90 @@ namespace diplom_project.Controllers
 
             return Ok(profileResponse);
         }
+
+        [HttpGet("get-avatar/{filePath}")]
+        [AllowAnonymous] // Доступен без авторизации, так как путь публичный
+        public IActionResult GetAvatar(string filePath)
+        {
+            // Санитизация пути
+            var sanitizedPath = filePath.TrimStart('/').Replace("../", ""); // Предотвращаем выход за пределы
+            var fullPath = Path.Combine(_env.WebRootPath, "uploads", sanitizedPath); // Добавляем "uploads" вручную
+
+            if (!System.IO.File.Exists(fullPath))
+            {
+                return NotFound($"Image not found at: {fullPath}");
+            }
+
+            var mimeType = "image/jpeg";
+            if (sanitizedPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                mimeType = "image/png";
+            else if (sanitizedPath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || sanitizedPath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
+                mimeType = "image/jpeg";
+
+            var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read);
+            return new FileStreamResult(fileStream, mimeType);
+        }
+        [HttpGet("get-all-avatars")]
+        [Authorize]
+        public async Task<IActionResult> GetAllAvatars()
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .Include(u => u.UserProfile)
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            var avatars = await _context.Users
+                .Where(u => u.UserProfile != null && u.UserProfile.PhotoUrl != null)
+                .Select(u => new { u.UserProfile.PhotoUrl })
+                .ToListAsync();
+
+            return Ok(avatars);
+        }
+        [HttpPost("upload-avatar")]
+        [Authorize]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public async Task<IActionResult> UploadAvatar([FromForm] IFormFile file)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .Include(u => u.UserProfile)
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null || user.UserProfile == null)
+                return NotFound("User not found");
+
+            if (file == null || file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            if (!file.ContentType.StartsWith("image/"))
+                return BadRequest("Only image files are allowed.");
+
+            var uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "avatars");
+            if (!Directory.Exists(uploadsFolder))
+                Directory.CreateDirectory(uploadsFolder);
+
+            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+            var filePath = Path.Combine(uploadsFolder, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            // Сохраняем только относительный путь от wwwroot
+            user.UserProfile.PhotoUrl = $"avatars%5C{fileName}";
+            await _context.SaveChangesAsync();
+
+            return Ok(new { photoUrl = user.UserProfile.PhotoUrl });
+        }
+
         [HttpPost("ratings/user")]
         [Authorize]
         public async Task<IActionResult> CreateUserRating([FromBody] UserRatingModel model)

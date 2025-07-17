@@ -228,6 +228,8 @@ namespace diplom_project.Controllers
             user.UserProfile.FirstName = model.FirstName;
             user.UserProfile.LastName = model.LastName;
             user.UserProfile.Surname = model.Surname;
+            user.UserProfile.Phone = model.Phone;
+            user.Phone = model.Phone;
             user.UserProfile.Location = model.Location;
             user.UserProfile.DateOfBirth = model.DateOfBirth;
             user.UserProfile.Description = model.Description;
@@ -281,6 +283,7 @@ namespace diplom_project.Controllers
         public string? Facebook { get; set; }
         public string? Telegram { get; set; }
         public string? Gender { get; set; }
+        public string Phone { get; set; }
     }
     public class UserRatingModel
     {

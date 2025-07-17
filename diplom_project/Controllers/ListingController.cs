@@ -247,9 +247,16 @@ namespace diplom_project.Controllers
             if (string.IsNullOrEmpty(email))
                 return Unauthorized();
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await _context.Users
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Email == email);
             if (user == null)
                 return NotFound("User not found");
+
+            // Проверка роли Landlord с защитой от null
+            if (!user.UserRoles.Any(ur => ur.Role.Name == "Landlord"))
+                return BadRequest("Only users with Landlord role can create listings");
 
             var houseType = await _context.HouseTypes.FindAsync(model.HouseTypeId);
             if (houseType == null)
@@ -271,7 +278,8 @@ namespace diplom_project.Controllers
                 Model3DUrl = model.Model3DUrl,
                 IsModerated = false,
                 CreatedDate = DateTime.UtcNow,
-                maxTenants = model.maxTenants,
+                maxTenants = model.maxTenants
+                
             };
 
             // Добавление удобств
@@ -518,6 +526,13 @@ namespace diplom_project.Controllers
             if (listing == null)
                 return NotFound("Listing not found");
 
+            // Проверка isModerated и роли Admin
+            if (listing.IsModerated == false || listing.IsModerated == null)
+                return BadRequest("Listing must be moderated by an Admin to create a booking");
+
+            if(listing.isOccupied == true)
+                return BadRequest("Listing already booked");
+
             // Проверка CheckInTime
             if (model.CheckInTime < listing.CheckInTime)
                 return BadRequest($"Check-in time must be at least {listing.CheckInTime:hh\\:mm}");
@@ -573,6 +588,7 @@ namespace diplom_project.Controllers
             };
 
             _context.PendingListings.Add(pendingListing);
+
 
             // Перевод суммы на PendingBalance
             user.Balance -= totalPrice;
@@ -635,7 +651,39 @@ namespace diplom_project.Controllers
 
             return Ok(new { message = $"Booking {message} successfully" });
         }
+        [HttpPost("moderate-listing/{listingId}")]
+        [Authorize]
+        public async Task<IActionResult> ModerateListing(int listingId)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
 
+            var user = await _context.Users
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            // Проверка роли Admin
+            if (!user.UserRoles.Any(ur => ur.Role.Name == "Admin"))
+                return BadRequest("Only Admin can moderate listings");
+
+            var listing = await _context.Listings
+                .FirstOrDefaultAsync(l => l.Id == listingId);
+            if (listing == null)
+                return NotFound("Listing not found");
+
+            // Установка isModerated = true
+            if (listing.IsModerated == true)
+                return BadRequest("Listing is already moderated");
+
+            listing.IsModerated = true;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Listing moderated successfully" });
+        }
         // Метод для подтверждения бронирования
         [HttpPost("confirm-booking/{pendingListingId}")]
         [Authorize]
@@ -664,7 +712,26 @@ namespace diplom_project.Controllers
             if (pendingListing.Confirmed)
                 return BadRequest("Booking is already confirmed");
 
-            // Получаем отправителя (пользователя, создавшего заявку)
+            // Получаем все остальные заявки на этот listing
+            var otherPendingListings = await _context.PendingListings
+                .Where(pl => pl.ListingId == pendingListing.ListingId && pl.Id != pendingListingId)
+                .ToListAsync();
+
+            foreach (var otherPending in otherPendingListings)
+            {
+                var requester3 = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Id == otherPending.UserId);
+
+                if (requester3 != null)
+                {
+                    // Возврат суммы на Balance
+                    requester3.Balance += otherPending.TotalPrice;
+                    requester3.PendingBalance -= otherPending.TotalPrice;
+                    _context.Users.Update(requester3);
+                }
+                _context.PendingListings.Remove(otherPending);
+            }
+
             var requester = await _context.Users
                 .FirstOrDefaultAsync(u => u.Id == pendingListing.UserId);
             if (requester == null)
@@ -672,7 +739,7 @@ namespace diplom_project.Controllers
 
             // Подтверждение бронирования
             pendingListing.Confirmed = true;
-
+            pendingListing.Listing.isOccupied = true;
             // Перевод денег с PendingBalance отправителя на Balance владельца
             requester.PendingBalance -= pendingListing.TotalPrice;
             user.Balance += pendingListing.TotalPrice; // Прибавляем владельцу
@@ -750,6 +817,78 @@ namespace diplom_project.Controllers
 
             return Ok(trips);
         }
+        [HttpGet("get-landlord-bookingsDate")]
+        [Authorize]
+        public async Task<IActionResult> GetLandlordBookings()
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            // Проверка роли Landlord
+            if (!user.UserRoles.Any(ur => ur.Role.Name == "Landlord"))
+                return Forbid("Only Landlord can view their bookings");
+
+            // Получаем все Listings пользователя с их PendingListings
+            var bookings = await (from l in _context.Listings
+                                  join pl in _context.PendingListings on l.Id equals pl.ListingId
+                                  where l.UserId == user.Id
+                                  select new
+                                  {
+                                      ListingId = pl.ListingId,
+                                      DateFrom = pl.DateFrom,
+                                      DateTo = pl.DateTo,
+                                      ListingName = l.Title
+                                  }).ToListAsync();
+
+            return Ok(bookings);
+        }
+        [HttpGet("get-landlord-listings")]
+        [Authorize]
+        public async Task<IActionResult> GetLandlordListings()
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            // Проверка роли Landlord
+            if (!user.UserRoles.Any(ur => ur.Role.Name == "Landlord"))
+                return Forbid("Only Landlord can view their listings");
+
+            // Получаем все Listings пользователя с необходимыми данными
+            var listings = await _context.Listings
+                .Where(l => l.UserId == user.Id)
+                .Select(l => new
+                {
+                    Id = l.Id,
+                    Title = l.Title,
+                    Country = l.Country,
+                    IsModerated = l.IsModerated,
+                    IsOccupied = l.isOccupied,
+                    AverageRating = l.AverageRating,
+                    PhotoUrl = l.ListingPhotos
+                        .OrderBy(lp => lp.PhotoId) // Берем первую фотографию по Id
+                        .Select(lp => lp.Photo.Url)
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
+
+            return Ok(listings);
+        }
         public class RentalType
         {
             public string? TypeName { get; set; }
@@ -757,6 +896,7 @@ namespace diplom_project.Controllers
         }
         public class ListingModel
         {
+            public int Id {  get; set; }
             public int HouseTypeId { get; set; }
             public string Title { get; set; }
             public TimeSpan CheckInTime {  get; set; }
@@ -774,6 +914,7 @@ namespace diplom_project.Controllers
             public int maxTenants {get; set; }
             public decimal? Rating {  get; set; }
             public string Country { get; set; }
+
         }
         public class RatingModel
         {

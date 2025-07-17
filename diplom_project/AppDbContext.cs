@@ -31,6 +31,17 @@ namespace diplom_project
         {
             modelBuilder.Entity<PendingListing>()
                 .HasOne(pl => pl.Listing)
+                .WithMany(l => l.PendingListings)
+                .HasForeignKey(pl => pl.ListingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Убедимся, что нет конфликтующих настроек
+            modelBuilder.Entity<PendingListing>()
+                .Property(pl => pl.ListingId)
+                .HasColumnName("ListingId"); // Явно задаем имя столбца
+            
+            modelBuilder.Entity<PendingListing>()
+                .HasOne(pl => pl.Listing)
                 .WithMany()
                 .HasForeignKey(pl => pl.ListingId);
 
@@ -114,6 +125,17 @@ namespace diplom_project
 
             modelBuilder.Entity<ListingPhoto>()
                 .HasKey(lp => new { lp.ListingId, lp.PhotoId });
+            modelBuilder.Entity<ListingPhoto>()
+                .HasOne(lp => lp.Listing)
+                .WithMany(l => l.ListingPhotos)
+                .HasForeignKey(lp => lp.ListingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ListingPhoto>()
+                .HasOne(lp => lp.Photo)
+                .WithMany(p => p.ListingPhotos)
+                .HasForeignKey(lp => lp.PhotoId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Listing>()
                 .HasMany(l => l.ListingAmenities)

@@ -26,9 +26,14 @@ namespace diplom_project
         public DbSet<RatingListUser> RatingListUsers { get; set; }
         public DbSet<RatingListListing> RatingListListings { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
-
+        public DbSet<PendingListing> PendingListings { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<PendingListing>()
+                .HasOne(pl => pl.Listing)
+                .WithMany()
+                .HasForeignKey(pl => pl.ListingId);
+
             modelBuilder.Entity<ChatMessage>()
                 .HasKey(cm => cm.Id);
 

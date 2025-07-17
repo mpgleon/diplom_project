@@ -112,6 +112,21 @@ namespace diplom_project.Controllers
 
             return Ok(avatars);
         }
+        [HttpGet("get-balance")]
+        [Authorize]
+        public async Task<IActionResult> GetBalance()
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            return Ok(new { Balance = user.Balance });
+        }
         [HttpPost("upload-avatar")]
         [Authorize]
         [ApiExplorerSettings(IgnoreApi = true)]
@@ -146,7 +161,7 @@ namespace diplom_project.Controllers
             }
 
             // Сохраняем только относительный путь от wwwroot
-            user.UserProfile.PhotoUrl = $"avatars%5C{fileName}";
+            user.UserProfile.PhotoUrl = $"avatars\\{fileName}";
             await _context.SaveChangesAsync();
 
             return Ok(new { photoUrl = user.UserProfile.PhotoUrl });
@@ -216,7 +231,6 @@ namespace diplom_project.Controllers
             user.UserProfile.Location = model.Location;
             user.UserProfile.DateOfBirth = model.DateOfBirth;
             user.UserProfile.Description = model.Description;
-            user.UserProfile.PhotoUrl = model.PhotoUrl;
             user.UserProfile.Instagram = model.Instagram;
             user.UserProfile.Facebook = model.Facebook;
             user.UserProfile.Telegram = model.Telegram;
@@ -263,7 +277,6 @@ namespace diplom_project.Controllers
         [Required]
         public List<string>? LanguageCodes { get; set; }
         public string? Description { get; set; }
-        public string? PhotoUrl { get; set; }
         public string? Instagram { get; set; }
         public string? Facebook { get; set; }
         public string? Telegram { get; set; }

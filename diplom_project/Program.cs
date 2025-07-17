@@ -132,6 +132,11 @@ namespace diplom_project
                 FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.WebRootPath, "uploads", "avatars")),
                 RequestPath = "/uploads/avatars"
             });
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.WebRootPath, "uploads", "listings")),
+                RequestPath = "/uploads/listings"
+            });
             app.UseRouting();
             app.UseHttpsRedirection(); //12312312312321
             app.UseAuthentication();

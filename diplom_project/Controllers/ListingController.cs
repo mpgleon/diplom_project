@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 
 
@@ -15,10 +16,11 @@ namespace diplom_project.Controllers
     {
 
         private readonly AppDbContext _context;
-
-        public ListingController(AppDbContext context)
+        private readonly IWebHostEnvironment _env;
+        public ListingController(AppDbContext context, IWebHostEnvironment env)
         {
             _context = context;
+            _env = env;
         }
 
         [HttpGet("amenities")]
@@ -259,7 +261,7 @@ namespace diplom_project.Controllers
                 HouseTypeId = model.HouseTypeId,
                 Title = model.Title,
                 CheckInTime = model.CheckInTime,
-                CheckOutTime = model.CheckOurTime,
+                CheckOutTime = model.CheckOutTime,
                 Description = model.Description,
                 PerWeek = model.PerWeek,
                 PerDay = model.PerDay,
@@ -304,7 +306,7 @@ namespace diplom_project.Controllers
             }
 
             // Добавление фотографий
-            if (model.PhotoUrls != null)
+            /*if (model.PhotoUrls != null)
             {
                 foreach (var photoUrl in model.PhotoUrls)
                 {
@@ -312,16 +314,445 @@ namespace diplom_project.Controllers
                     _context.Photos.Add(photo);
                     listing.ListingPhotos.Add(new ListingPhoto { Photo = photo, ListingId = listing.Id });
                 }
-            }
+            }*/
 
             _context.Listings.Add(listing);
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Listing created successfully", listing.Id });
         }
+
+        [HttpPost("upload-photos")]
+        [Authorize]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public async Task<IActionResult> UploadPhotos([FromForm] int listingId, [FromForm] IFormFileCollection files)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            var listing = await _context.Listings
+                .Include(l => l.ListingPhotos)
+                .FirstOrDefaultAsync(l => l.Id == listingId && l.UserId == user.Id);
+            if (listing == null)
+                return NotFound("Listing not found or you don't have permission");
+
+            if (files == null || !files.Any())
+                return BadRequest("No files uploaded.");
+
+            var uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "listings", listingId.ToString());
+            if (!Directory.Exists(uploadsFolder))
+                Directory.CreateDirectory(uploadsFolder);
+
+            var photoUrls = new List<string>();
+            foreach (var file in files)
+            {
+                if (!file.ContentType.StartsWith("image/"))
+                    return BadRequest("Only image files are allowed.");
+
+                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+                var filePath = Path.Combine(uploadsFolder, fileName);
+
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await file.CopyToAsync(stream);
+                }
+
+                // Сохраняем относительный путь
+                var photoUrl = $"listings\\{listingId}\\{fileName}";
+                photoUrls.Add(photoUrl);
+
+                // Добавляем запись в базу
+                var photo = new Photo { Url = photoUrl, CreatedDate = DateTime.UtcNow };
+                _context.Photos.Add(photo);
+                listing.ListingPhotos.Add(new ListingPhoto { Photo = photo, ListingId = listingId });
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { photoUrls });
+        }
+        [HttpGet("get-all-photos/{listingId}")]
+        [AllowAnonymous] // Доступен без авторизации, так как фото публичны
+        public async Task<IActionResult> GetAllPhotos(int listingId)
+        {
+            var listing = await _context.Listings
+                .Include(l => l.ListingPhotos)
+                .ThenInclude(lp => lp.Photo)
+                .FirstOrDefaultAsync(l => l.Id == listingId);
+
+            if (listing == null)
+                return NotFound("Listing not found");
+
+            var photoUrls = listing.ListingPhotos
+                .Select(lp => lp.Photo.Url)
+                .ToList();
+
+            return Ok(new { photoUrls });
+        }
+        [HttpGet("get-photo/{filePath}")]
+        [AllowAnonymous]
+        public IActionResult GetPhoto(string filePath)
+        {
+            // Санитизация пути
+            var sanitizedPath = filePath.TrimStart('/').Replace("../", ""); // Предотвращаем выход за пределы
+            var fullPath = Path.Combine(_env.WebRootPath, "uploads", sanitizedPath); // Добавляем "uploads" вручную
+
+            if (!System.IO.File.Exists(fullPath))
+            {
+                return NotFound($"Image not found at: {fullPath}");
+            }
+
+            var mimeType = "image/jpeg";
+            if (sanitizedPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                mimeType = "image/png";
+            else if (sanitizedPath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || sanitizedPath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
+                mimeType = "image/jpeg";
+
+            var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read);
+            return new FileStreamResult(fileStream, mimeType);
+        }
+        [HttpDelete("delete-photo")]
+        [Authorize]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public async Task<IActionResult> DeletePhoto([FromQuery] int listingId, [FromQuery] string photoUrl)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            var listing = await _context.Listings
+                .Include(l => l.ListingPhotos)
+                .ThenInclude(lp => lp.Photo)
+                .FirstOrDefaultAsync(l => l.Id == listingId && l.UserId == user.Id);
+            if (listing == null)
+                return NotFound("Listing not found or you don't have permission");
+
+            // Преобразуем входящий photoUrl в формат базы данных (заменяем \ на %5C)
+            //var dbPhotoUrl = photoUrl.Replace("\\", "%5C");
+
+            // Находим фото по преобразованному URL
+            var listingPhoto = listing.ListingPhotos
+                .FirstOrDefault(lp => lp.Photo.Url == photoUrl);
+            if (listingPhoto == null)
+                return NotFound("Photo not found");
+
+            // Преобразуем путь для файловой системы
+            //var sanitizedPath = dbPhotoUrl.Replace("%5C", "\\");
+
+            var fullPath = Path.Combine(_env.WebRootPath, "uploads", photoUrl);
+
+            // Проверяем существование файла
+            if (!System.IO.File.Exists(fullPath))
+            {
+                // Попробуем нормализовать путь
+                var normalizedPath = Path.GetFullPath(fullPath);
+                if (!System.IO.File.Exists(normalizedPath))
+                {
+                    return NotFound($"File not found at: {normalizedPath}");
+                }
+                fullPath = normalizedPath; // Используем нормализованный путь
+            }
+
+            try
+            {
+                // Проверяем права доступа
+                var fileInfo = new FileInfo(fullPath);
+                if (!fileInfo.Exists)
+                    return NotFound($"File info not found at: {fullPath}");
+
+                // Удаляем файл
+                System.IO.File.Delete(fullPath);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, $"Access denied: {ex.Message}");
+            }
+            catch (IOException ex)
+            {
+                return StatusCode(500, $"IO error: {ex.Message}");
+            }
+
+            _context.ListingPhotos.Remove(listingPhoto);
+            _context.Photos.Remove(listingPhoto.Photo);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Photo deleted successfully" });
+        }
+        [HttpPost("create-booking")]
+        [Authorize]
+        public async Task<IActionResult> CreateBooking([FromBody] BookingModel model)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .Include(u => u.UserProfile)
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            // Проверка соответствия ФИО, почты и телефона
+            if (user.UserProfile == null ||
+                model.FirstName != user.UserProfile.FirstName ||
+                model.LastName != user.UserProfile.LastName ||
+                model.Email != user.Email ||
+                model.Phone != user.Phone)
+            {
+                return BadRequest("Provided personal details do not match the current user or profile is incomplete");
+            }
+
+            var listing = await _context.Listings
+                .FirstOrDefaultAsync(l => l.Id == model.ListingId);
+            if (listing == null)
+                return NotFound("Listing not found");
+
+            // Проверка CheckInTime
+            if (model.CheckInTime < listing.CheckInTime)
+                return BadRequest($"Check-in time must be at least {listing.CheckInTime:hh\\:mm}");
+
+            // Проверка количества людей
+            if (model.NumberOfPeople > listing.maxTenants)
+                return BadRequest($"Number of people ({model.NumberOfPeople}) exceeds maximum allowed ({listing.maxTenants})");
+
+            // Расчет количества дней, недель или месяцев
+            var dateFrom = model.DateFrom.Date;
+            var dateTo = model.DateTo.Date;
+            if (dateFrom > dateTo)
+                return BadRequest("DateFrom cannot be later than DateTo");
+
+            var totalDays = (dateTo - dateFrom).Days + 1;
+            decimal totalPrice = 0;
+
+            if (listing.PerDay.HasValue && totalDays <= 7)
+            {
+                totalPrice = listing.PerDay.Value * totalDays;
+            }
+            else if (listing.PerWeek.HasValue && totalDays >= 7 && totalDays <= 30)
+            {
+                var totalWeeks = (int)Math.Ceiling(totalDays / 7.0);
+                totalPrice = listing.PerWeek.Value * totalWeeks;
+            }
+            else if (listing.PerMonth.HasValue && totalDays > 30)
+            {
+                var totalMonths = (int)Math.Ceiling(totalDays / 30.0);
+                totalPrice = listing.PerMonth.Value * totalMonths;
+            }
+            else
+            {
+                return BadRequest("No valid pricing option available for the selected period");
+            }
+
+            // Проверка баланса
+            if (user.Balance < totalPrice)
+                return BadRequest($"Insufficient balance. Required: {totalPrice}, Available: {user.Balance}");
+
+            // Создание записи в PendingListings
+            var pendingListing = new PendingListing
+            {
+                UserId = user.Id,
+                ListingId = model.ListingId,
+                Description = model.Description,
+                DateFrom = dateFrom,
+                DateTo = dateTo,
+                CheckInTime = model.CheckInTime,
+                Confirmed = false,
+                NumberOfPeople = model.NumberOfPeople,
+                TotalPrice = totalPrice
+            };
+
+            _context.PendingListings.Add(pendingListing);
+
+            // Перевод суммы на PendingBalance
+            user.Balance -= totalPrice;
+            user.PendingBalance += totalPrice;
+            _context.Users.Update(user);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Booking request created successfully",
+                pendingListingId = pendingListing.Id,
+                totalPrice = totalPrice
+            });
+        }
+
+        // Метод для отмены бронирования
+        [HttpPost("cancel-booking/{pendingListingId}")]
+        [Authorize]
+        public async Task<IActionResult> CancelBooking(int pendingListingId)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            var pendingListing = await _context.PendingListings
+                .Include(pl => pl.Listing) // Загружаем связанный Listing
+                .FirstOrDefaultAsync(pl => pl.Id == pendingListingId);
+            if (pendingListing == null)
+                return NotFound("Booking request not found");
+
+            // Проверка прав: либо создатель заявки, либо владелец Listing
+            if (pendingListing.UserId != user.Id && pendingListing.Listing.UserId != user.Id)
+                return Unauthorized(new { message = "Only the tenant or listing owner can cancel the booking" });
+
+            if (pendingListing.Confirmed)
+                return BadRequest("Cannot cancel a confirmed booking");
+
+            // Возврат суммы на Balance
+            var requester = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == pendingListing.UserId);
+            if (requester == null)
+                return NotFound("Requester not found");
+
+            requester.Balance += pendingListing.TotalPrice;
+            requester.PendingBalance -= pendingListing.TotalPrice;
+            _context.PendingListings.Remove(pendingListing);
+
+            await _context.SaveChangesAsync();
+
+            // Сообщение зависит от роли
+            var message = pendingListing.UserId == user.Id
+                ? "canceled by tenant"
+                : "canceled by landlord";
+
+            return Ok(new { message = $"Booking {message} successfully" });
+        }
+
+        // Метод для подтверждения бронирования
+        [HttpPost("confirm-booking/{pendingListingId}")]
+        [Authorize]
+        public async Task<IActionResult> ConfirmBooking(int pendingListingId)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            var pendingListing = await _context.PendingListings
+                .Include(pl => pl.Listing) // Загружаем связанный Listing
+                .FirstOrDefaultAsync(pl => pl.Id == pendingListingId);
+            if (pendingListing == null)
+                return NotFound("Booking request not found");
+
+            // Проверка, что текущий пользователь — владелец Listing
+            if (pendingListing.Listing.UserId != user.Id)
+            {
+                return Unauthorized(new { message = "Only the listing owner can confirm the booking" });
+            }
+            if (pendingListing.Confirmed)
+                return BadRequest("Booking is already confirmed");
+
+            // Получаем отправителя (пользователя, создавшего заявку)
+            var requester = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == pendingListing.UserId);
+            if (requester == null)
+                return NotFound("Requester not found");
+
+            // Подтверждение бронирования
+            pendingListing.Confirmed = true;
+
+            // Перевод денег с PendingBalance отправителя на Balance владельца
+            requester.PendingBalance -= pendingListing.TotalPrice;
+            user.Balance += pendingListing.TotalPrice; // Прибавляем владельцу
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Booking confirmed successfully" });
+        }
+        [HttpDelete("delete-listing/{listingId}")]
+        [Authorize]
+        public async Task<IActionResult> DeleteListing(int listingId)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            var listing = await _context.Listings
+                .Include(l => l.ListingPhotos)
+                .ThenInclude(lp => lp.Photo)
+                .FirstOrDefaultAsync(l => l.Id == listingId);
+            if (listing == null)
+                return NotFound("Listing not found");
+
+            // Проверка, что текущий пользователь — создатель объявления
+            if (listing.UserId != user.Id)
+                return Forbid("Only the creator of the listing can delete it");
+
+            // Удаление связанных фотографий с диска
+            foreach (var listingPhoto in listing.ListingPhotos)
+            {
+                var fullPath = Path.Combine(_env.WebRootPath, "uploads", listingPhoto.Photo.Url);
+                if (System.IO.File.Exists(fullPath))
+                {
+                    System.IO.File.Delete(fullPath);
+                }
+            }
+
+            // Удаление записи Listings (связанные данные удалятся каскадно)
+            _context.Listings.Remove(listing);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Listing deleted successfully" });
+        }
+        [HttpGet("user-trips/{userId}")]
+        public async Task<IActionResult> GetUserTrips(int userId)
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+                return NotFound("User not found");
+
+            var trips = await _context.PendingListings
+                .Include(pl => pl.Listing)
+                    .ThenInclude(l => l.ListingPhotos)
+                    .ThenInclude(lp => lp.Photo)
+                .Where(pl => pl.UserId == user.Id && pl.Confirmed)
+                .Select(pl => new
+                {
+                    DateRange = $"{pl.DateFrom:dd.MM}-{pl.DateTo:dd.MM}",
+                    PhotoUrl = pl.Listing.ListingPhotos
+                        .OrderBy(lp => lp.PhotoId)
+                        .Select(lp => lp.Photo.Url)
+                        .FirstOrDefault(),
+                    Rating = pl.Listing.AverageRating ?? 0,
+                    Country = pl.Listing.Country,
+                    Location = pl.Listing.Location
+                })
+                .ToListAsync();
+
+            return Ok(trips);
+        }
         public class RentalType
         {
-            public string? TypeName { get; set; } // ? позволяет null
+            public string? TypeName { get; set; }
             public bool IsAvailable { get; set; }
         }
         public class ListingModel
@@ -329,7 +760,7 @@ namespace diplom_project.Controllers
             public int HouseTypeId { get; set; }
             public string Title { get; set; }
             public TimeSpan CheckInTime {  get; set; }
-            public TimeSpan CheckOurTime { get; set; }
+            public TimeSpan CheckOutTime { get; set; }
             public string Description { get; set; }
             public decimal? PerWeek { get; set; }
             public decimal? PerDay { get; set; }
@@ -339,7 +770,7 @@ namespace diplom_project.Controllers
             public List<int> AmenityIds { get; set; } // Список ID удобств
             public List<int> MainFeatureIds { get; set; } // Список ID главных параметров
             public List<string> MainFeatureValues { get; set; } // Значения для числовых параметров
-            public List<string> PhotoUrls { get; set; } // Список путей к фотографиям
+            //public List<string> PhotoUrls { get; set; } // Список путей к фотографиям
             public int maxTenants {get; set; }
             public decimal? Rating {  get; set; }
             public string Country { get; set; }

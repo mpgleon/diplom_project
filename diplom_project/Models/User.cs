@@ -17,5 +17,6 @@ namespace diplom_project.Models
         public ICollection<UserRole> UserRoles { get; set; }
         public UserProfile? UserProfile { get; set; }
         public decimal Balance { get; set; }
+        public decimal PendingBalance { get; set; }
     }
 }

@@ -14,7 +14,7 @@ namespace diplom_project.Services
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private Timer _timer;
-        private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1); // Уменьшен для тестирования, верните 5 минут после тестов
+        private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(5); // Уменьшен для тестирования, верните 5 минут после тестов
         private bool _isRunning;
 
         public BookingExpirationService(IServiceScopeFactory scopeFactory)

@@ -41,45 +41,7 @@ namespace diplom_project.Controllers
             return Ok(mainFeatures);
         }
 
-        [HttpPost("ratings/listing")]
-        [Authorize]
-        public async Task<IActionResult> CreateListingRating([FromBody] RatingModel model)
-        {
-            var email = User.FindFirst(ClaimTypes.Email)?.Value;
-            if (string.IsNullOrEmpty(email))
-                return Unauthorized();
-
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (user == null)
-                return NotFound("User not found");
-
-            var listing = await _context.Listings.FindAsync(model.ListingId);
-            if (listing == null)
-                return BadRequest("Listing not found");
-            // Проверка на существующий отзыв
-            var existingRating = await _context.RatingListListings
-                .FirstOrDefaultAsync(rll => rll.UserId == user.Id && rll.ListingId == model.ListingId);
-            if (existingRating != null)
-                return BadRequest("You have already left a review for this listing.");
-
-            var rating = new RatingListListing
-            {
-                UserId = user.Id,
-                ListingId = model.ListingId,
-                Description = model.Description,
-                Rating = model.Rating,
-                CreatedDate = DateTime.UtcNow
-            };
-
-            _context.RatingListListings.Add(rating);
-            await _context.SaveChangesAsync();
-
-            // Обновляем рейтинг объявления
-            var ratingService = _context.GetService<IRatingService>();
-            await ratingService.UpdateListingRatingAsync(model.ListingId);
-
-            return Ok(new { message = "Rating added successfully" });
-        }
+        
 
         [HttpGet("selected/{id}")]
         [AllowAnonymous]
@@ -329,7 +291,122 @@ namespace diplom_project.Controllers
 
             return Ok(new { message = "Listing created successfully", listing.Id });
         }
+        [HttpPut("updateListing/{id}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateListing(int id, [FromBody] ListingModel model)
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
 
+            var user = await _context.Users
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            // Проверка роли Landlord с защитой от null
+            if (!user.UserRoles.Any(ur => ur.Role.Name == "Landlord"))
+                return BadRequest("Only users with Landlord role can update listings");
+
+            var listing = await _context.Listings
+                .Include(l => l.ListingAmenities)
+                .Include(l => l.ListingMainFeatures)
+                .FirstOrDefaultAsync(l => l.Id == id && l.UserId == user.Id);
+            if (listing == null)
+                return NotFound("Listing not found or you do not have permission to update it");
+            if (listing.isOccupied)
+                return BadRequest("Listing is occupied and not able to be update at the moment");
+            var houseType = await _context.HouseTypes.FindAsync(model.HouseTypeId);
+            if (houseType == null)
+                return BadRequest("Invalid house type");
+
+            // Обновление основных полей
+            listing.HouseTypeId = model.HouseTypeId;
+            listing.Title = model.Title;
+            listing.CheckInTime = model.CheckInTime;
+            listing.CheckOutTime = model.CheckOutTime;
+            listing.Description = model.Description;
+            listing.PerWeek = model.PerWeek;
+            listing.PerDay = model.PerDay;
+            listing.PerMonth = model.PerMonth;
+            listing.Country = model.Country;
+            listing.Location = model.Location;
+            listing.Model3DUrl = model.Model3DUrl;
+            listing.maxTenants = model.maxTenants;
+            listing.IsModerated = false;
+            // Обновление или удаление удобств
+            if (model.AmenityIds != null)
+            {
+                // Удаляем существующие удобства, которые не входят в новый список
+                var amenitiesToRemove = listing.ListingAmenities
+                    .Where(la => !model.AmenityIds.Contains(la.AmenityId))
+                    .ToList();
+                foreach (var amenity in amenitiesToRemove)
+                {
+                    _context.ListingAmenities.Remove(amenity);
+                }
+
+                // Добавляем новые или сохраняем существующие удобства
+                foreach (var amenityId in model.AmenityIds)
+                {
+                    if (!listing.ListingAmenities.Any(la => la.AmenityId == amenityId))
+                    {
+                        var amenity = await _context.Amenities.FindAsync(amenityId);
+                        if (amenity != null)
+                        {
+                            listing.ListingAmenities.Add(new ListingAmenity { AmenityId = amenityId, ListingId = listing.Id });
+                        }
+                    }
+                }
+            }
+
+            // Обновление или удаление главных параметров
+            if (model.MainFeatureIds != null)
+            {
+                // Удаляем существующие параметры, которые не входят в новый список
+                var featuresToRemove = listing.ListingMainFeatures
+                    .Where(lmf => !model.MainFeatureIds.Contains(lmf.MainFeatureId))
+                    .ToList();
+                foreach (var feature in featuresToRemove)
+                {
+                    _context.ListingMainFeatures.Remove(feature);
+                }
+
+                // Добавляем новые или обновляем существующие параметры
+                for (int i = 0; i < model.MainFeatureIds.Count; i++)
+                {
+                    var featureId = model.MainFeatureIds[i];
+                    var existingFeature = listing.ListingMainFeatures
+                        .FirstOrDefault(lmf => lmf.MainFeatureId == featureId);
+                    if (existingFeature != null)
+                    {
+                        var feature = await _context.MainFeatures.FindAsync(featureId);
+                        if (feature != null && feature.IsNumeric)
+                        {
+                            existingFeature.Value = model.MainFeatureValues?[i];
+                        }
+                    }
+                    else
+                    {
+                        var feature = await _context.MainFeatures.FindAsync(featureId);
+                        if (feature != null)
+                        {
+                            listing.ListingMainFeatures.Add(new ListingMainFeature
+                            {
+                                MainFeatureId = featureId,
+                                Value = feature.IsNumeric ? model.MainFeatureValues?[i] : null,
+                                ListingId = listing.Id
+                            });
+                        }
+                    }
+                }
+            }
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Listing updated successfully", listing.Id });
+        }
         [HttpPost("upload-photos")]
         [Authorize]
         [ApiExplorerSettings(IgnoreApi = true)]
@@ -748,7 +825,18 @@ namespace diplom_project.Controllers
             requester.PendingBalance -= pendingListing.TotalPrice;
             user.Balance += pendingListing.TotalPrice; // Прибавляем владельцу
 
+            
+            var achievement = new Achievements
+            {
+                UserId = requester.Id,
+                Datestamp = DateTime.UtcNow,
+                Description = "1+ бронювання",
+                Commercial = 250
+            };
+            requester.Commercial += 250;
+            _context.Achievements.Add(achievement);
             await _context.SaveChangesAsync();
+
 
             return Ok(new { message = "Booking confirmed successfully" });
         }
@@ -903,6 +991,7 @@ namespace diplom_project.Controllers
             {
                 return BadRequest("Country parameter is required.");
             }
+
             var listing = await _context.Listings
             .Include(l => l.HouseType)
             .Include(l => l.ListingPhotos)
@@ -972,11 +1061,6 @@ namespace diplom_project.Controllers
             public string Country { get; set; }
 
         }
-        public class RatingModel
-        {
-            public int ListingId { get; set; }
-            public string Description { get; set; }
-            public decimal Rating { get; set; }
-        }
+        
     }
 }

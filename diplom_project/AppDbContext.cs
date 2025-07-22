@@ -27,6 +27,7 @@ namespace diplom_project
         public DbSet<RatingListListing> RatingListListings { get; set; }
         public DbSet<ChatMessage> ChatMessages { get; set; }
         public DbSet<PendingListing> PendingListings { get; set; }
+        public DbSet<Achievements> Achievements { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<PendingListing>()

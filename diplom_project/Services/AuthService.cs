@@ -99,6 +99,17 @@
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
+            var achievement = new Achievements
+            {
+                UserId = user.Id,
+                Datestamp = DateTime.UtcNow,
+                Description = "Реєстрація на сайті",
+                Commercial = 100
+            };
+
+            user.Commercial += 100;
+            _context.Achievements.Add(achievement);
+
             var userProfile = new UserProfile
             {
                 UserId = user.Id,

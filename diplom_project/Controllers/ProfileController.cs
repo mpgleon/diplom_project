@@ -167,47 +167,9 @@ namespace diplom_project.Controllers
             return Ok(new { photoUrl = user.UserProfile.PhotoUrl });
         }
 
-        [HttpPost("ratings/user")]
-        [Authorize]
-        public async Task<IActionResult> CreateUserRating([FromBody] UserRatingModel model)
-        {
-            var email = User.FindFirst(ClaimTypes.Email)?.Value;
-            if (string.IsNullOrEmpty(email))
-                return Unauthorized();
+        
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (user == null)
-                return NotFound("User not found");
-
-            var ratedUser = await _context.Users.FindAsync(model.UserId2);
-            if (ratedUser == null)
-                return BadRequest("Rated user not found");
-
-            var existingRating = await _context.RatingListUsers
-                .FirstOrDefaultAsync(rlu => rlu.UserId1 == user.Id && rlu.UserId2 == model.UserId2);
-            if (existingRating != null)
-                return BadRequest("You have already left a review for this user.");
-
-            var rating = new RatingListUser
-            {
-                UserId1 = user.Id,
-                UserId2 = model.UserId2,
-                Description = model.Description,
-                Rating = model.Rating,
-                CreatedDate = DateTime.UtcNow
-            };
-
-            _context.RatingListUsers.Add(rating);
-            await _context.SaveChangesAsync();
-
-            // Обновляем рейтинг пользователя
-            var ratingService = _context.GetService<IRatingService>();
-            await ratingService.UpdateUserRatingAsync(model.UserId2);
-
-            return Ok(new { message = "Rating added successfully" });
-        }
-
-        [HttpPost("update")]
+        [HttpPut("update")]
         [Authorize]
         public async Task<IActionResult> UpdateProfile([FromBody] ProfileModel model)
         {
@@ -287,11 +249,5 @@ namespace diplom_project.Controllers
         public string? Telegram { get; set; }
         public string? Gender { get; set; }
         public string Phone { get; set; }
-    }
-    public class UserRatingModel
-    {
-        public int UserId2 { get; set; } // Кому оставлен отзыв
-        public string Description { get; set; }
-        public decimal Rating { get; set; }
-    }
+    } 
 }

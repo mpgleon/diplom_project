@@ -18,5 +18,6 @@ namespace diplom_project.Models
         public UserProfile? UserProfile { get; set; }
         public decimal Balance { get; set; }
         public decimal PendingBalance { get; set; }
+        public decimal Commercial { get; set; }
     }
 }

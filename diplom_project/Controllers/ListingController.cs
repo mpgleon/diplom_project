@@ -5,7 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 
 
 namespace diplom_project.Controllers
@@ -126,16 +128,14 @@ namespace diplom_project.Controllers
                     l.PerWeek,
                     l.PerDay,
                     l.PerMonth,
-                    
-                    
                 })
                 .AsNoTracking()
                 .FirstOrDefaultAsync();
             var rentalTypes = new List<string>
             {
-                listing.PerWeek.HasValue ? "Аренда на неделю" : null,
-                listing.PerDay.HasValue ? "Посуточная аренда" : null,
-                listing.PerMonth.HasValue ? "Аренда на месяц" : null
+                listing.PerWeek.HasValue ? "Потижнева" : null,
+                listing.PerDay.HasValue ? "Подобова" : null,
+                listing.PerMonth.HasValue ? "Помiсячна" : null
             }.Where(rt => rt != null).ToList();
             if (listing == null)
                 return NotFound("Listing not found");
@@ -211,9 +211,9 @@ namespace diplom_project.Controllers
 
             var rentalTypes = new List<string>
             {
-                listing.PerWeek.HasValue ? "Аренда на неделю" : null,
-                listing.PerDay.HasValue ? "Посуточная аренда" : null,
-                listing.PerMonth.HasValue ? "Аренда на месяц" : null
+                listing.PerWeek.HasValue ? "Потижнева" : null,
+                listing.PerDay.HasValue ? "Подобова" : null,
+                listing.PerMonth.HasValue ? "Помiсячна" : null
             }.Where(rt => rt != null).ToList();
 
             var result = new
@@ -407,8 +407,11 @@ namespace diplom_project.Controllers
         [AllowAnonymous]
         public IActionResult GetPhoto(string filePath)
         {
+            Console.WriteLine("GetPhotoMethod");
             // Санитизация пути
             var sanitizedPath = filePath.TrimStart('/').Replace("../", ""); // Предотвращаем выход за пределы
+            Console.WriteLine(sanitizedPath);
+            Console.WriteLine(filePath);
             var fullPath = Path.Combine(_env.WebRootPath, "uploads", sanitizedPath); // Добавляем "uploads" вручную
 
             if (!System.IO.File.Exists(fullPath))
@@ -582,6 +585,7 @@ namespace diplom_project.Controllers
                 DateFrom = dateFrom,
                 DateTo = dateTo,
                 CheckInTime = model.CheckInTime,
+                CheckOutTime = model.CheckInTime,
                 Confirmed = false,
                 NumberOfPeople = model.NumberOfPeople,
                 TotalPrice = totalPrice
@@ -845,7 +849,9 @@ namespace diplom_project.Controllers
                                       ListingId = pl.ListingId,
                                       DateFrom = pl.DateFrom,
                                       DateTo = pl.DateTo,
-                                      ListingName = l.Title
+                                      ListingName = l.Title,
+                                      CheckInTime = l.CheckInTime,
+                                      CheckOutTime = l.CheckOutTime
                                   }).ToListAsync();
 
             return Ok(bookings);
@@ -888,6 +894,56 @@ namespace diplom_project.Controllers
                 .ToListAsync();
 
             return Ok(listings);
+        }
+        [HttpGet("by-country")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetListingsByCountry(string country)
+        {
+            if (string.IsNullOrEmpty(country))
+            {
+                return BadRequest("Country parameter is required.");
+            }
+            var listing = await _context.Listings
+            .Include(l => l.HouseType)
+            .Include(l => l.ListingPhotos)
+                .ThenInclude(lp => lp.Photo)
+            .Include(l => l.ListingAmenities)
+                .ThenInclude(la => la.Amenity)
+            .Where(l => l.IsModerated && l.Country == country)
+            .Select(l => new
+            {
+                title = l.Title,
+                country = l.Country,
+                Photos = l.ListingPhotos.Select(lp => lp.Photo.Url).ToList(),
+                housetype = new
+                {
+                    id = l.HouseTypeId,
+                    name = l.HouseType.Name
+                },
+
+                Price = l.PerWeek ?? l.PerDay ?? l.PerMonth,
+                maxTenants = l.maxTenants,
+                rating = l.AverageRating,
+                amenities = l.ListingAmenities.Select(la => new
+                {
+                    id = la.AmenityId,
+                    name = la.Amenity.Name
+                }),
+                l.PerWeek,
+                l.PerDay,
+                l.PerMonth
+            })
+            .AsNoTracking()
+            .ToListAsync();
+
+            if (listing == null || !listing.Any())
+            {
+                return NotFound($"No moderated listings found for country: {country}");
+            }
+
+            
+
+            return Ok(listing);
         }
         public class RentalType
         {

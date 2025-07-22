@@ -228,6 +228,8 @@ namespace diplom_project.Controllers
             user.UserProfile.FirstName = model.FirstName;
             user.UserProfile.LastName = model.LastName;
             user.UserProfile.Surname = model.Surname;
+            user.UserProfile.Email = model.Email;
+            user.Email = model.Email;
             user.UserProfile.Phone = model.Phone;
             user.Phone = model.Phone;
             user.UserProfile.Location = model.Location;
@@ -276,6 +278,7 @@ namespace diplom_project.Controllers
         public string Location { get; set; }
         [Required]
         public DateTime DateOfBirth { get; set; }
+        public string Email { get; set; }
         [Required]
         public List<string>? LanguageCodes { get; set; }
         public string? Description { get; set; }

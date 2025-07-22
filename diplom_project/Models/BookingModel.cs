@@ -23,6 +23,7 @@ namespace diplom_project.Models
         public DateTime DateTo { get; set; }
         [Required]
         public TimeSpan CheckInTime { get; set; }
+        public TimeSpan CheckOutTime { get; set; }
         [Required]
         [Range(1, int.MaxValue, ErrorMessage = "Number of people must be positive")]
         public int NumberOfPeople { get; set; }

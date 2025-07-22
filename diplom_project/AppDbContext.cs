@@ -35,7 +35,7 @@ namespace diplom_project
                 .HasForeignKey(pl => pl.ListingId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Убедимся, что нет конфликтующих настроек
+            /*// Убедимся, что нет конфликтующих настроек
             modelBuilder.Entity<PendingListing>()
                 .Property(pl => pl.ListingId)
                 .HasColumnName("ListingId"); // Явно задаем имя столбца
@@ -43,7 +43,7 @@ namespace diplom_project
             modelBuilder.Entity<PendingListing>()
                 .HasOne(pl => pl.Listing)
                 .WithMany()
-                .HasForeignKey(pl => pl.ListingId);
+                .HasForeignKey(pl => pl.ListingId);*/
 
             modelBuilder.Entity<ChatMessage>()
                 .HasKey(cm => cm.Id);

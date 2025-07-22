@@ -12,6 +12,7 @@ namespace diplom_project
 {
     public class Program
     {
+        
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
@@ -32,6 +33,7 @@ namespace diplom_project
             // Настройка сервиса
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.AddScoped<IRatingService, RatingService>();
+            
             // Настройка JWT
             builder.Services.AddAuthentication("Bearer")
                 .AddJwtBearer("Bearer", options =>
@@ -80,7 +82,7 @@ namespace diplom_project
             });
 
             
-
+            
             // Настройка Entity Framework
             builder.Services.AddDbContext<AppDbContext>(options => 
                 options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -92,8 +94,10 @@ namespace diplom_project
                 ));
 
             builder.Services.AddSignalR();
+            builder.Services.AddHostedService<BookingExpirationService>();
 
             var app = builder.Build();
+
             app.UseCors("AllowAll");
             app.Use(async (context, next) =>
             {

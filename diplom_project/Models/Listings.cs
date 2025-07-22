@@ -22,7 +22,7 @@ public class Listing
     public DateTime CreatedDate { get; set; }
     public User User { get; set; }
     public string? Model3DUrl { get; set; }
-    public bool? IsModerated { get; set; }
+    public bool IsModerated { get; set; }
     public HouseType HouseType { get; set; }
     public bool isOccupied { get; set; } = false;
     public int maxTenants { get; set; }

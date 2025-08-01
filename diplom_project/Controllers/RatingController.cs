@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using System.Linq;
 using System.Security.Claims;
 
 
@@ -99,6 +100,42 @@ namespace diplom_project.Controllers
 
             return Ok(new { message = "Rating added successfully" });
         }
+
+        [HttpGet("getAchievement")]
+        [Authorize]
+        public async Task<IActionResult> GetAchievement()
+        {
+            var email = User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email))
+                return Unauthorized();
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+                return NotFound("User not found");
+
+            var achievements = await _context.Achievements
+            .Where(a => a.UserId == user.Id)
+            .Select(a => new
+            {
+                id = a.Id,
+                userId = a.UserId,
+                datestamp = a.Datestamp,
+                description = a.Description,
+                commercial = a.Commercial
+            })
+            .ToListAsync();
+
+            if (achievements == null || !achievements.Any())
+            {
+                return NotFound("No achievements found for this user.");
+            }
+
+            return Ok(achievements);
+        }
+
+        
+
+
         public class RatingModel
         {
             public int ListingId { get; set; }

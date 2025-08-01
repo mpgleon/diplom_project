@@ -37,7 +37,6 @@ public class ChatHub : Hub
         _context.ChatMessages.Add(chatMessage);
         await _context.SaveChangesAsync();
 
-        // Отправка сообщения всем подключенным клиентам (или только recipient)
         await Clients.User(recipientId.ToString()).SendAsync("ReceiveMessage", sender.Id, message, chatMessage.Timestamp);
     }
 }

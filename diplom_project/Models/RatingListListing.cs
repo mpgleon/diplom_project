@@ -4,7 +4,7 @@
     {
         public int Id { get; set; }
         public int UserId { get; set; }
-        public int ListingId { get; set; } // Ожидаемое имя столбца
+        public int ListingId { get; set; }
         public string Description { get; set; }
         public decimal Rating { get; set; }
         public DateTime CreatedDate { get; set; }

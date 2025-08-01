@@ -18,6 +18,7 @@ public class Listing
     public TimeSpan CheckOutTime { get; set; } // Время выезда
 
     public string Country { get; set; }
+    public string City { get; set; }
     public string Location { get; set; }
     public DateTime CreatedDate { get; set; }
     public User User { get; set; }
@@ -32,4 +33,5 @@ public class Listing
     public ICollection<ListingPhoto> ListingPhotos { get; set; } = new List<ListingPhoto>();
     public ICollection<RatingListListing> RatingListListings { get; set; } = new List<RatingListListing>();
     public ICollection<PendingListing> PendingListings { get; set; } = new List<PendingListing>();
+    public ICollection<Favorite> Favorites { get; set; }
 }

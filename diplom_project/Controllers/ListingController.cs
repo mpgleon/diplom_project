@@ -2,6 +2,7 @@
 using diplom_project.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using System.ComponentModel.DataAnnotations;
@@ -58,6 +59,7 @@ namespace diplom_project.Controllers
                     Photos = l.ListingPhotos.Select(lp => lp.Photo.Url).ToList(),
                     l.Title,
                     l.Country,
+                    l.City,
                     l.Location,
                     l.AverageRating,
                     Landlord = new
@@ -136,6 +138,8 @@ namespace diplom_project.Controllers
                     HouseType = l.HouseType.Name,
                     Photos = l.ListingPhotos.Select(lp => lp.Photo.Url).ToList(),
                     l.Title,
+                    l.Country,
+                    l.City,
                     l.Location,
                     Price = l.PerWeek ?? l.PerDay ?? l.PerMonth,
                     Amenities = l.ListingAmenities.Select(la => la.Amenity.Name).ToList(),
@@ -159,7 +163,6 @@ namespace diplom_project.Controllers
                         ReviewerRating = rll.Reviewer.UserProfile.Rating,
                         rll.Description
                     }).ToList(),
-                    l.Country,
                     l.Description,
                     l.PerWeek,
                     l.PerDay,
@@ -236,6 +239,7 @@ namespace diplom_project.Controllers
                 PerDay = model.PerDay,
                 PerMonth = model.PerMonth,
                 Country = model.Country,
+                City = model.City,
                 Location = model.Location,
                 Model3DUrl = model.Model3DUrl,
                 IsModerated = false,
@@ -332,6 +336,7 @@ namespace diplom_project.Controllers
             listing.PerDay = model.PerDay;
             listing.PerMonth = model.PerMonth;
             listing.Country = model.Country;
+            listing.City = model.City;
             listing.Location = model.Location;
             listing.Model3DUrl = model.Model3DUrl;
             listing.maxTenants = model.maxTenants;
@@ -678,6 +683,49 @@ namespace diplom_project.Controllers
 
             await _context.SaveChangesAsync();
 
+            // Создание системного сообщения для арендодателя
+            var landlord = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id == listing.UserId);
+            if (landlord != null)
+            {
+                var bookingData = new
+                {
+                    type = "bookingRequest",
+                    data = new
+                    {
+                        listingId = listing.Id,
+                        title = listing.Title,
+                        country = listing.Country,
+                        city = listing.City,
+                        description = pendingListing.Description,
+                        rating = listing.AverageRating,
+                        photoUrl = listing.ListingPhotos.FirstOrDefault()?.Photo.Url,
+                        dateFrom = pendingListing.DateFrom,
+                        dateTo = pendingListing.DateTo,
+                        numberOfPeople = pendingListing.NumberOfPeople,
+                        price = pendingListing.TotalPrice
+                    }
+                };
+                var message = System.Text.Json.JsonSerializer.Serialize(bookingData);
+
+                var chatMessage = new ChatMessage
+                {
+                    SenderId = user.Id, // Системное сообщение
+                    RecipientId = landlord.Id,
+                    Message = message,
+                    Timestamp = DateTime.UtcNow,
+                    IsRead = false
+                };
+
+                _context.ChatMessages.Add(chatMessage);
+                await _context.SaveChangesAsync();
+
+                // Отправка уведомления через ChatHub
+                var chatHub = _context.GetService<IHubContext<ChatHub>>();
+                await chatHub.Clients.User(landlord.Id.ToString()).SendAsync("ReceiveMessage", null, message, chatMessage.Timestamp);
+            }
+
+
             return Ok(new
             {
                 message = "Booking request created successfully",
@@ -903,7 +951,7 @@ namespace diplom_project.Controllers
                         .FirstOrDefault(),
                     Rating = pl.Listing.AverageRating ?? 0,
                     Country = pl.Listing.Country,
-                    Location = pl.Listing.Location
+                    City = pl.Listing.City
                 })
                 .ToListAsync();
 
@@ -971,6 +1019,7 @@ namespace diplom_project.Controllers
                     Id = l.Id,
                     Title = l.Title,
                     Country = l.Country,
+                    City = l.City,
                     IsModerated = l.IsModerated,
                     IsOccupied = l.isOccupied,
                     AverageRating = l.AverageRating,
@@ -983,57 +1032,108 @@ namespace diplom_project.Controllers
 
             return Ok(listings);
         }
-        [HttpGet("by-country")]
-        [AllowAnonymous]
-        public async Task<IActionResult> GetListingsByCountry(string country)
+
+
+        [HttpGet("search")]
+        public async Task<IActionResult> SearchListings(
+        string country,
+        string city = null,
+        int? guests = null,
+        DateTime? checkIn = null,
+        DateTime? checkOut = null)
         {
+            // Валидация обязательного параметра country
             if (string.IsNullOrEmpty(country))
             {
                 return BadRequest("Country parameter is required.");
             }
 
-            var listing = await _context.Listings
-            .Include(l => l.HouseType)
-            .Include(l => l.ListingPhotos)
-                .ThenInclude(lp => lp.Photo)
-            .Include(l => l.ListingAmenities)
-                .ThenInclude(la => la.Amenity)
-            .Where(l => l.IsModerated && l.Country == country)
-            .Select(l => new
-            {
-                title = l.Title,
-                country = l.Country,
-                Photos = l.ListingPhotos.Select(lp => lp.Photo.Url).ToList(),
-                housetype = new
-                {
-                    id = l.HouseTypeId,
-                    name = l.HouseType.Name
-                },
+            // Базовый запрос
+            var query = _context.Listings
+                .Include(l => l.HouseType)
+                .Include(l => l.ListingPhotos)
+                    .ThenInclude(lp => lp.Photo)
+                .Include(l => l.ListingAmenities)
+                    .ThenInclude(la => la.Amenity)
+                .Where(l => l.IsModerated && l.Country == country && !l.isOccupied);
 
-                Price = l.PerWeek ?? l.PerDay ?? l.PerMonth,
-                maxTenants = l.maxTenants,
-                rating = l.AverageRating,
-                amenities = l.ListingAmenities.Select(la => new
-                {
-                    id = la.AmenityId,
-                    name = la.Amenity.Name
-                }),
-                l.PerWeek,
-                l.PerDay,
-                l.PerMonth
-            })
-            .AsNoTracking()
-            .ToListAsync();
-
-            if (listing == null || !listing.Any())
+            // Фильтрация по городу, если указан
+            if (!string.IsNullOrEmpty(city))
             {
-                return NotFound($"No moderated listings found for country: {country}");
+                query = query.Where(l => l.City == city);
             }
 
-            
+            // Фильтрация по количеству гостей
+            if (guests.HasValue)
+            {
+                query = query.Where(l => l.maxTenants >= guests.Value)
+                             .OrderBy(l => l.maxTenants == guests ? 0 : 1); // Приоритет равных maxTenants
+            }
 
-            return Ok(listing);
+            // Расчет цены на основе дат
+            var listings = await query
+                .Select(l => new
+                {
+                    title = l.Title,
+                    country = l.Country,
+                    city = l.City,
+                    photos = l.ListingPhotos.Select(lp => lp.Photo.Url).ToList(),
+                    housetype = new
+                    {
+                        id = l.HouseTypeId,
+                        name = l.HouseType.Name
+                    },
+                    price = CalculatePrice(l, checkIn, checkOut),
+                    originalPrices = new { l.PerWeek, l.PerDay, l.PerMonth },
+                    maxTenants = l.maxTenants,
+                    rating = l.AverageRating,
+                    amenities = l.ListingAmenities.Select(la => new
+                    {
+                        id = la.AmenityId,
+                        name = la.Amenity.Name
+                    })
+                })
+                .AsNoTracking()
+                .ToListAsync();
+
+            if (listings == null || !listings.Any())
+            {
+                return NotFound($"No moderated listings found for country: {country}" + (city != null ? $" and city: {city}" : ""));
+            }
+
+            return Ok(listings);
         }
+
+
+        private static decimal? CalculatePrice(Listing l, DateTime? checkIn, DateTime? checkOut)
+        {
+            if (!checkIn.HasValue || !checkOut.HasValue || checkIn.Value >= checkOut.Value)
+            {
+                // Если даты не указаны или некорректны, возвращаем базовую цену
+                return l.PerWeek ?? l.PerDay ?? l.PerMonth;
+            }
+
+            int days = (checkOut.Value - checkIn.Value).Days;
+            if (days <= 0) return null;
+
+            if (days >= 28 && l.PerMonth.HasValue)
+            {
+                return l.PerMonth.Value * (days / 28) + (days % 28) * (l.PerDay ?? 0);
+            }
+            else if (days >= 7 && l.PerWeek.HasValue)
+            {
+                return l.PerWeek.Value * (days / 7) + (days % 7) * (l.PerDay ?? 0);
+            }
+            else if (l.PerDay.HasValue)
+            {
+                return l.PerDay.Value * days;
+            }
+
+            return null; // Если нет подходящей цены
+        }
+
+
+
         public class RentalType
         {
             public string? TypeName { get; set; }
@@ -1051,6 +1151,7 @@ namespace diplom_project.Controllers
             public decimal? PerDay { get; set; }
             public decimal? PerMonth { get; set; }
             public string Location { get; set; }
+            public string City { get; set; }
             public string? Model3DUrl { get; set; } // Поле для 3D-модели
             public List<int> AmenityIds { get; set; } // Список ID удобств
             public List<int> MainFeatureIds { get; set; } // Список ID главных параметров

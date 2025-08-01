@@ -19,5 +19,6 @@ namespace diplom_project.Models
         public decimal Balance { get; set; }
         public decimal PendingBalance { get; set; }
         public decimal Commercial { get; set; }
+        public ICollection<Favorite> Favorites { get; set; }
     }
 }

@@ -28,8 +28,28 @@ namespace diplom_project
         public DbSet<ChatMessage> ChatMessages { get; set; }
         public DbSet<PendingListing> PendingListings { get; set; }
         public DbSet<Achievements> Achievements { get; set; }
+        public DbSet<Favorite> Favorites { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+
+            modelBuilder.Entity<Favorite>()
+                .HasOne(f => f.User)
+                .WithMany(u => u.Favorites)
+                .HasForeignKey(f => f.idUser)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Настройка связи между Listing и Favorite
+            modelBuilder.Entity<Favorite>()
+                .HasOne(f => f.Listing)
+                .WithMany(l => l.Favorites)
+                .HasForeignKey(f => f.idListing)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Уникальный индекс для комбинации idUser и idListing
+            modelBuilder.Entity<Favorite>()
+                .HasIndex(f => new { f.idUser, f.idListing })
+                .IsUnique();
+
             modelBuilder.Entity<PendingListing>()
                 .HasOne(pl => pl.Listing)
                 .WithMany(l => l.PendingListings)
